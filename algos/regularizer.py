@@ -4,7 +4,7 @@ import torch.nn as nn
 
 def fair_reg(preds, Xp):
     Xp = torch.cat((Xp, 1-Xp), dim=1)
-    viol = preds.mean()-(preds@Xp)/Xp.sum(axis=0)
+    viol = preds.mean()-(preds@Xp)/torch.max(Xp.sum(axis=0), torch.ones(Xp.shape[1])*1e-5)
     return (viol**2).mean()
 
 class Regularizer:
@@ -40,7 +40,10 @@ class Regularizer:
         for t in range(self.T):
             preds = self.learner(X).flatten()
             bce = bce_loss(preds, y)
-            reg = fair_reg(preds, Xp)
+            if self.fairness == 'EO':
+                reg = fair_reg(preds[y==1], Xp[y==1])
+            if self.fairness == 'DP':
+                reg = fair_reg(preds, Xp)
             loss = bce + self.rho*reg
             if evaluate:
                 print(f't:{t}, bce:{bce.item():.7f}, reg:{reg.item():.7f}, loss:{loss.item():.7f}')

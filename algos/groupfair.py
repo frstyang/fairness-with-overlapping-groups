@@ -5,13 +5,15 @@ from sklearn.utils.testing import ignore_warnings
 from sklearn.exceptions import ConvergenceWarning
 
 class GroupFair:
-    def __init__(self, B, nu, T, lr=0.1, fairness='ind', lambda_update = 'subgradient'):
+    def __init__(self, B, nu, T, lr=0.1, gfair='ind', fairness='DP', lambda_update = 'subgradient'):
         # T = number of iterations to train for
         self.B = B
         self.nu = nu
         self.T = T
+        self.gfair = gfair
+        assert gfair in ['ind', 'gerry']
         self.fairness = fairness
-        assert fairness in ['ind', 'gerry']
+        assert fairness in ['DP', 'EO']
         self.lr=lr
         assert lambda_update in ['subgradient', 'expgradient']
         self.lambda_update = lambda_update
@@ -40,10 +42,10 @@ class GroupFair:
     def calc_viols(self, h, X, Xp):
         preds = h(X, Xp)
         preds_mean = preds.mean()
-        if self.fairness == 'ind':
-            preds_gmeans = (preds@Xp)/Xp.sum(axis=0)
+        if self.gfair == 'ind':
+            preds_gmeans = (preds@Xp)/np.maximum(Xp.sum(axis=0), 1e-5)
             return preds_mean - preds_gmeans
-        if self.fairness == 'gerry':
+        if self.gfair == 'gerry':
             n=X.shape[0]
             return Xp.mean(axis=0)*preds_mean - preds@Xp/n
     
@@ -63,7 +65,10 @@ class GroupFair:
             lambda_t = self.lambdas[-1]
             h_t = self.min_oracle(lambda_t, X, Xp, y)
             preds = h_t(X, Xp)
-            viols = self.calc_viols(h_t, X, Xp)
+            if self.fairness == 'DP':
+                viols = self.calc_viols(h_t, X, Xp)
+            if self.fairness == 'EO':
+                viols = self.calc_viols(h_t, X[y==1], Xp[y==1])
             self.viols.append(viols)
             lambda_t_plus_1 = self.update_lambda(lambda_t, viols, t)
             
@@ -85,8 +90,13 @@ class Plugin(GroupFair):
 
     @ignore_warnings(category=ConvergenceWarning)
     def min_oracle(self, lambda_, X, Xp, y):
-        if self.fairness == 'ind':
+        if self.gfair == 'ind':
             pi_hat = Xp.mean(axis=0)
+        if self.fairness == 'EO':
+            pi_y_inv = 1/max(1e-5,np.mean(y))
+            gp_pi_y = (y@Xp)/np.maximum(Xp.sum(axis=0), 1e-5)
+            gp_pi_y_inv = 1/np.maximum(gp_pi_y, 1e-5)
+
         if not hasattr(self, 'eta'):
             lr = LogisticRegression(max_iter=1000, fit_intercept=True).fit(X, y)
             self.eta = lr.predict_proba
@@ -94,11 +104,15 @@ class Plugin(GroupFair):
             n, m = input_Xp.shape
             cost = np.array([0,1,1,0])
             net_lambda = lambda_[0] - lambda_[1]
-            if self.fairness == 'ind':
-                viol_weights = net_lambda.sum()-input_Xp@(net_lambda/pi_hat)
-            if self.fairness == 'gerry':
-                viol_weights = Xp.mean(axis=0)@net_lambda - input_Xp@net_lambda
-            cost = cost + viol_weights[:, None]*np.array([0,1,0,1])
+            if self.fairness == 'DP':
+                if self.gfair == 'ind':
+                    viol_weights = net_lambda.sum()-input_Xp@(net_lambda/pi_hat)
+                if self.gfair == 'gerry':
+                    viol_weights = Xp.mean(axis=0)@net_lambda - input_Xp@net_lambda
+                cost = cost + viol_weights[:, None]*np.array([0,1,0,1])
+            if self.fairness == 'EO':
+                viol_weights = net_lambda.sum()*pi_y_inv - input_Xp@(net_lambda*gp_pi_y_inv/pi_hat)
+                cost = cost + viol_weights[:, None]*np.array([0,0,0,1])
             cost = cost.reshape(n, 2,2)
             eta = self.eta(input_X)
             final_costs = (eta.reshape(n, 2, 1)*cost).sum(axis=1)
@@ -116,11 +130,19 @@ class WERM(GroupFair):
         n = X.shape[0]
         pi_hat = Xp.mean(axis=0)
         net_lambda = lambda_[0] - lambda_[1]
-        if self.fairness == 'ind':
-            viol_weights = net_lambda.sum()-Xp@(net_lambda/pi_hat)
-        if self.fairness == 'gerry':
+        if self.gfair == 'ind':
+            if self.fairness == 'DP':
+                viol_weights = net_lambda.sum()-Xp@(net_lambda/pi_hat)
+                weights = viol_weights[:,None]*np.array([0,1]) + np.array([[0, 1],[1,0]])[y]
+            if self.fairness == 'EO':
+                pi_y_inv = 1/max(1e-5,np.mean(y))
+                gp_pi_y = (y@Xp)/np.maximum(Xp.sum(axis=0), 1e-5)
+                gp_pi_y_inv = 1/np.maximum(gp_pi_y, 1e-5)
+                viol_weights = y*(net_lambda.sum()*pi_y_inv - Xp@(net_lambda*gp_pi_y_inv/pi_hat))
+                weights = viol_weights[:, None]*np.array([0,1]) + np.array([[0, 1],[1,0]])[y]
+
+        if self.gfair == 'gerry':
             viol_weights = pi_hat@net_lambda - Xp@net_lambda
-        weights = viol_weights[:,None]*np.array([0,1]) + np.array([[0, 1],[1,0]])[y]
         if self.lr_type=='logistic':
             weights = weights - weights.min(axis=1)[:, None]
             y_tilde = np.argmin(weights, axis=1)

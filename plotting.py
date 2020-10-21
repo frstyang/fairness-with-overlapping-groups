@@ -39,7 +39,7 @@ def cvxhull(x,y):
                 
     return np.array(new_x), np.array(new_y)
 
-def plot_results(ax,results,dset,train=False):
+def plot_results(ax,results,dset,train=False, gerry=False):
     for result in results:
         metric_keys = result[0]['metrics'].keys()
         zipped_metrics = {}
@@ -56,24 +56,39 @@ def plot_results(ax,results,dset,train=False):
             print(f"Average training time: {np.mean(zipped_metrics['train_time']):.5f}s")
             print(f"Average prediction time: {np.mean(zipped_metrics['predict_time']):.5f}s")
         prefix = 'train_' if train else ''
-        viols = zipped_metrics[prefix+'ind_viol']
+        if gerry:
+            viols = zipped_metrics[prefix+'gerry_viol']
+        else:
+            viols = zipped_metrics[prefix+'ind_viol']
         accs = zipped_metrics[prefix+'accuracy']
         v,e = cvxhull(viols, 1-np.array(accs))
         ax.plot(v,e, linewidth=3, label=name)
-    ax.set_xlabel('Independent group fairness violation')
-    ax.set_ylabel('Classification error')
+    ax.set_xlabel('Independent group fairness violation', fontsize=12)
+    ax.set_ylabel('Classification error', fontsize=12)
     ax.legend()
-    ax.set_title(f'{prefix}{str.upper(dset[0])}{dset[1:]}')
+    ax.set_title(f'{prefix}{str.upper(dset[0])}{dset[1:]}', fontsize=17)
 
 if __name__ == '__main__':
     print('Enter name for saved figure:')
     name = input()
-    fig, axes = plt.subplots(2,4,figsize=(25, 11))
-    for i,dset in enumerate(['communities', 'adult', 'german', 'lawschool']):
-        print('======================================')
-        print(f'Plotting {dset} results....')
-        with open(f'results/{dset}_ind.pkl', 'rb') as f:
-            results = pickle.load(f)
-        plot_results(axes[0,i], results, dset)
-        plot_results(axes[1,i], results, dset, True)
+    print('Enter what exp to plot (0 for ind, 1 for gerry)')
+    plottype = int(input())
+    if plottype == 0:
+        fig, axes = plt.subplots(2,4,figsize=(25, 11))
+        for i,dset in enumerate(['communities', 'adult', 'german', 'lawschool']):
+            print('======================================')
+            print(f'Plotting {dset} results....')
+            with open(f'results/{dset}_ind.pkl', 'rb') as f:
+                results = pickle.load(f)
+            plot_results(axes[0,i], results, dset)
+            plot_results(axes[1,i], results, dset, True)
+    if plottype == 1:
+        fig, axes = plt.subplots(2,3, figsize=(18.5, 11))
+        for i, dset in enumerate(['adult', 'german', 'lawschool']):
+            print('======================================')
+            print(f'Plotting {dset} results....')
+            with open(f'results/{dset}_gerry.pkl', 'rb') as f:
+                results = pickle.load(f)
+            plot_results(axes[0,i], results, dset, gerry=True)
+            plot_results(axes[1,i], results, dset, True, gerry=True)
     fig.savefig(f"plots/{name}")
