@@ -39,7 +39,10 @@ def cvxhull(x,y):
                 
     return np.array(new_x), np.array(new_y)
 
-def plot_results(ax,results,dset,train=False, gerry=False):
+def plot_results(ax,results,dset,train=False, plottype=0, permute=True):
+    # permute 
+    if permute:
+        results[0], results[2] = results[2], results[0]
     for result in results:
         metric_keys = result[0]['metrics'].keys()
         zipped_metrics = {}
@@ -56,14 +59,20 @@ def plot_results(ax,results,dset,train=False, gerry=False):
             print(f"Average training time: {np.mean(zipped_metrics['train_time']):.5f}s")
             print(f"Average prediction time: {np.mean(zipped_metrics['predict_time']):.5f}s")
         prefix = 'train_' if train else ''
-        if gerry:
-            viols = zipped_metrics[prefix+'gerry_viol']
-        else:
+        if plottype==0:
             viols = zipped_metrics[prefix+'ind_viol']
+        if plottype==1:
+            viols = zipped_metrics[prefix+'ind_viol']
+        if plottype==2:
+            viols = zipped_metrics[prefix+'gerry_viol']
+            
         accs = zipped_metrics[prefix+'accuracy']
         v,e = cvxhull(viols, 1-np.array(accs))
         ax.plot(v,e, linewidth=3, label=name)
-    ax.set_xlabel('Independent group fairness violation', fontsize=12)
+    if plottype == 0:
+        ax.set_xlabel('Independent group fairness violation', fontsize=12)
+    if plottype == 1:
+        ax.set_xlabel('Independent EO group fairness violation', fontsize=12)
     ax.set_ylabel('Classification error', fontsize=12)
     ax.legend()
     ax.set_title(f'{prefix}{str.upper(dset[0])}{dset[1:]}', fontsize=17)
@@ -71,18 +80,19 @@ def plot_results(ax,results,dset,train=False, gerry=False):
 if __name__ == '__main__':
     print('Enter name for saved figure:')
     name = input()
-    print('Enter what exp to plot (0 for ind, 1 for gerry)')
+    print('Enter what exp to plot (0 for ind, 1, for eo, 2 for gerry)')
+    exps = ['ind', 'eo']
     plottype = int(input())
-    if plottype == 0:
+    if plottype in [0,1]:
         fig, axes = plt.subplots(2,4,figsize=(25, 11))
         for i,dset in enumerate(['communities', 'adult', 'german', 'lawschool']):
             print('======================================')
             print(f'Plotting {dset} results....')
-            with open(f'results/{dset}_ind.pkl', 'rb') as f:
+            with open(f'results/{dset}_{exps[plottype]}.pkl', 'rb') as f:
                 results = pickle.load(f)
-            plot_results(axes[0,i], results, dset)
-            plot_results(axes[1,i], results, dset, True)
-    if plottype == 1:
+            plot_results(axes[0,i], results, dset, plottype=plottype)
+            plot_results(axes[1,i], results, dset, True, plottype=plottype)
+    if plottype == 2:
         fig, axes = plt.subplots(2,3, figsize=(18.5, 11))
         for i, dset in enumerate(['adult', 'german', 'lawschool']):
             print('======================================')
