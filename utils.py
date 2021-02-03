@@ -68,6 +68,18 @@ def calc_ind_viol(preds, Xp):
     gviols = gmeans - pmean
     return max(np.max(np.abs(gviols)), np.max(np.abs(gviols*gs/(n-gs))))
 
+def calc_eo_viol(preds, Xp, y):
+    # calculate equal opportunity fairness violation
+    # using predictions preds on protected att mat Xp
+    n_y = max(1, np.sum(y))
+    n_g_ys = y @ Xp
+    y_mean = (preds @ y)/n_y
+    g_y_means = ((preds * y) @ Xp)/np.maximum(1, n_g_ys)
+    viols = (g_y_means - y_mean) * (n_g_ys > 0)
+    abs_viols = np.abs(viols)
+    return max(np.max(abs_viols), np.max(abs_viols * n_g_ys / (n_y - n_g_ys))) 
+    
+
 def calc_gerry_viol(preds, gerry_Xp):
     #v^T(I-11^T/n)Xp
     n,m = gerry_Xp.shape
