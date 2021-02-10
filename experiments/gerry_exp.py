@@ -3,8 +3,8 @@ from algos import groupfair, gerfair
 from utils import calc_acc, calc_gerry_viol, calc_gerry_viol2
 
 methods = [groupfair.Plugin, groupfair.WERM, gerfair.GerryFair]
-params_list = [{'B':[10], 'nu':np.logspace(-4,0,20), 'T':[10000], 'lr': [1], 'fairness': ['gerry'], 'lambda_update': ['subgradient']},
-               {'B':[10], 'nu':np.logspace(-4,0,20), 'T':[10000], 'lr': [1], 'fairness': ['gerry'], 'lambda_update': ['subgradient']},
+params_list = [{'B':[10], 'nu':np.logspace(-4,0,20), 'T':[10000], 'lr': [1], 'fairness': ['DP'], 'gfair': ['gerry'], 'lambda_update': ['subgradient']},
+               {'B':[10], 'nu':np.logspace(-4,0,20), 'T':[10000], 'lr': [1], 'fairness': ['DP'], 'gfair': ['gerry'], 'lambda_update': ['subgradient']},
 {'C':[15], 'nu':np.logspace(-3,0,20), 'T':[1500]}]
 
 metrics_list = [
